@@ -8,6 +8,7 @@
 
 
 
+
 import bpy
 import os
 import os.path
@@ -18,18 +19,11 @@ import mathutils.geometry
 
 
 
+NUMCOL = 10				# number of columns (corners)
+RADIUS = 2.5			# radius to corners
 
-NUMCOL = 8
-RADIUS = 2.0
-EDGELEN = 0.0
+SMALLER_RAD_FAC = 0.6	# factor to scale middle-ring down compared to base-ring.
 
-SMALLER_RAD_FAC = 0.6
-
-# if not defining radius, use edgesize.
-if RADIUS <=0.0:
-	RADIUS = 0.5*EDGELEN / math.sin(math.pi/NUMCOL)
-elif EDGELEN>0.0:
-	print("WARNING: having both radius and edgelen defined. ignoring edgelen.")
 
 # calc all vertexes and normals.
 # vertexes.
@@ -37,10 +31,12 @@ HEIGHT_DOME = RADIUS*0.6
 HEIGHT_INT_RING = HEIGHT_DOME*math.sqrt(0.5)
 
 
+ROOM_HEIGHT = 2.0		# for elevating above the ground.
+
 # bar dimensions
-BAR_W = 0.04   * 2
-BAR_T = 0.028   * 2
-BAR_END_TAP = 0.09   * 2
+BAR_W = 0.04
+BAR_T = 0.028
+BAR_END_TAP = 0.09
 
 
 #_msh = bpy.data.meshes.new('einMesh')
@@ -108,10 +104,11 @@ def dirvecs_to_rotquat(forwardvector,upwardvector):
 	""" convert dir-vectors to quat. Assume foward is Y+, Z is up to sky. """
 	fwd = forwardvector.copy()
 	upw = upwardvector.copy()
-	fwd.normalize()
-	upw -= fwd.dot(upw)*fwd
-	upw.normalize()
-	rgt = fwd.cross(upw)
+	fwd.normalize()				# vector to length 1.
+	upw -= fwd.dot(upw)*fwd		# remove component parallel to fwd, which causes dot-prod to be non-zero. Thus fix to be orthogonal.
+	upw.normalize()				# after fixing, normalize to 1.
+	rgt = fwd.cross(upw)		# find third vector from the two using crossproduct.
+	# use the three as column-vectors and build the rotation matrix.
 	m = mathutils.Matrix((mathutils.Vector((rgt.x,fwd.x,upw.x)),mathutils.Vector((rgt.y,fwd.y,upw.y)),mathutils.Vector((rgt.z,fwd.z,upw.z))))
 	return m.to_quaternion()
 
@@ -119,18 +116,14 @@ def upvec_to_rotquat(upwardvector):
 	""" convert upward-vec to one possible rot-quat """
 	upw = upwardvector.copy()
 	upw.normalize()
+	# find any orthogonal vector: Drop smallest component, swap other two, negate one of them.
 	if upw.x*upw.x < upw.y*upw.y and upw.x*upw.x < upw.z*upw.z :
 		fwd = mathutils.Vector((0.0,upw.z,-upw.y))
 	elif upw.y*upw.y < upw.z*upw.z :
 		fwd = mathutils.Vector((upw.z,0.0,-upw.x))
 	else:
 		fwd = mathutils.Vector((upw.y,-upw.x,0.0))
-	fwd -= upw.dot(fwd)*upw
-	fwd.normalize()
-	rgt = fwd.cross(upw)
-	m = mathutils.Matrix((mathutils.Vector((rgt.x,fwd.x,upw.x)),mathutils.Vector((rgt.y,fwd.y,upw.y)),mathutils.Vector((rgt.z,fwd.z,upw.z))))
-	return m.to_quaternion()
-
+	return dirvecs_to_rotquat(fwd,upwardvector)
 
 
 
@@ -168,7 +161,10 @@ for i in range(NUMCOL):
 	#edges of one middle-ring vertex
 	sv1 = verts[i+NUMCOL] - verts[i]
 	sv2 = verts[i+NUMCOL] - verts[(i+1)%NUMCOL]
-	sv3 = verts[2*NUMCOL] - verts[i+NUMCOL]
+	sv3 = verts[i+NUMCOL] - verts[2*NUMCOL]
+	sv1.normalize()
+	sv2.normalize()
+	sv3.normalize()
 	p = Plane(sv1,sv2,sv3)
 	n = p.norm
 #	n = sv1+sv2+sv3
@@ -218,14 +214,21 @@ for i in range(NUMCOL):
 
 # process edges to find orientation
 edges_n = list()
-for et in edges:
-	v0 = verts[et[0]]
-	v1 = verts[et[1]]
-	lon = v1-v0
-	tmp = lon.cross(et[2])
-	nn = tmp.cross(lon)
-	nn.normalize()
-	edges_n.append((et[0],et[1],nn))
+for idx0,idx1,tup in edges:
+	v0 = verts[idx0]
+	v1 = verts[idx1]
+	edir = (v1-v0).copy()
+	edir.normalize()
+	n0 = norms[idx0].copy()
+	n1 = norms[idx1].copy()
+	# shift norms to make them vertical to direction of bar.
+	n0 -= edir.dot(n0)*edir
+	n1 -= edir.dot(n1)*edir
+	n0.normalize()
+	n1.normalize()
+	# pick average of these as 'up' for the bar.
+	up = 0.5*(n0+n1)
+	edges_n.append((idx0,idx1,up))
 
 edges = edges_n
 del(edges_n)
@@ -279,11 +282,29 @@ def gencube(name,lx,ly,lz):
 	_obj.rotation_mode = 'QUATERNION'
 	return _obj
 
+def genscrewline(name,l):
+	l*=0.5
+	verts = ((0,0,-l),(0,0,l))
+	edgs = ((0,1),)
+	facs = ()
+	# now create it.
+	_msh = bpy.data.meshes.new('linemesh')
+	_obj = bpy.data.objects.new(name,_msh)
+	_msh.from_pydata(verts,edgs,facs)
+	_msh.validate()
+	bpy.context.scene.collection.objects.link(_obj)
+	_obj.rotation_mode = 'QUATERNION'
+	return _obj
+
 
 # bar dimensions
 #BAR_W  0.04     * 4
 #BAR_T  0.028     * 4
 #BAR_END_TAP  0.09     * 4
+
+# one parent object for easier handling.
+obj_dome = bpy.data.objects.new('dome',None)
+bpy.context.scene.collection.objects.link(obj_dome)
 
 for i in range(len(edges)):
 	idx0,idx1,upw = edges[i]
@@ -296,7 +317,17 @@ for i in range(len(edges)):
 	q = dirvecs_to_rotquat(v1-v0,upw)
 	obj.rotation_quaternion = q
 	obj.scale = mathutils.Vector((1,1,1))
+	obj.parent = obj_dome
 
+for i in range(len(verts)):
+	obj = genscrewline("screw%02d"%i,0.3)
+	obj.location = verts[i]
+	q = upvec_to_rotquat(norms[i])
+	obj.rotation_quaternion = q
+	obj.scale = mathutils.Vector((1,1,1))
+	obj.parent = obj_dome
+
+#obj_dome.location = mathutils.Vector((0,0,ROOM_HEIGHT))
 
 # TODO:
 #   lots
