@@ -100,8 +100,8 @@ v2 = mathutils.Vector((1,2,30))
 v3 = mathutils.Vector((4,5,6))
 p = Plane(v1,v2,v3)
 
-def dirvecs_to_rotquat(forwardvector,upwardvector):
-	""" convert dir-vectors to quat. Assume foward is Y+, Z is up to sky. """
+def dirvecs_to_rotmat(forwardvector,upwardvector):
+	""" convert dir-vectors to matrix. Assume foward is Y+, Z is up to sky. """
 	fwd = forwardvector.copy()
 	upw = upwardvector.copy()
 	fwd.normalize()				# vector to length 1.
@@ -109,11 +109,15 @@ def dirvecs_to_rotquat(forwardvector,upwardvector):
 	upw.normalize()				# after fixing, normalize to 1.
 	rgt = fwd.cross(upw)		# find third vector from the two using crossproduct.
 	# use the three as column-vectors and build the rotation matrix.
-	m = mathutils.Matrix((mathutils.Vector((rgt.x,fwd.x,upw.x)),mathutils.Vector((rgt.y,fwd.y,upw.y)),mathutils.Vector((rgt.z,fwd.z,upw.z))))
+	return mathutils.Matrix((mathutils.Vector((rgt.x,fwd.x,upw.x)),mathutils.Vector((rgt.y,fwd.y,upw.y)),mathutils.Vector((rgt.z,fwd.z,upw.z))))
+
+def dirvecs_to_rotquat(forwardvector,upwardvector):
+	""" convert dir-vectors to quat. Assume foward is Y+, Z is up to sky. """
+	m = dirvecs_to_rotmat(forwardvector,upwardvector)
 	return m.to_quaternion()
 
-def upvec_to_rotquat(upwardvector):
-	""" convert upward-vec to one possible rot-quat """
+def upvec_to_rotmat(upwardvector):
+	""" convert upward-vec to one possible rot-matrix """
 	upw = upwardvector.copy()
 	upw.normalize()
 	# find any orthogonal vector: Drop smallest component, swap other two, negate one of them.
@@ -123,8 +127,36 @@ def upvec_to_rotquat(upwardvector):
 		fwd = mathutils.Vector((upw.z,0.0,-upw.x))
 	else:
 		fwd = mathutils.Vector((upw.y,-upw.x,0.0))
-	return dirvecs_to_rotquat(fwd,upwardvector)
+	return dirvecs_to_rotmat(fwd,upwardvector)
 
+def upvec_to_rotquat(upwardvector):
+	""" convert upward-vec to one possible rot-quat """
+	m = upvec_to_rotmat(upwardvector)
+	return m.to_quaternion()
+
+def calc_angle(vec1,vec2,axis=None):
+	vec1.copy()
+	vec2.copy()
+	vec1.normalize()
+	vec2.normalize()
+	if axis is not None:
+		m = dirvecs_to_rotmat(axis,vec1)
+		m.transpose()	# invert
+		# now apply vec2 to get it into XY plane
+		v2 = m @ vec2
+		#print(m)
+		#print(m@axis)
+		#print(m@vec1)
+		#print(m@vec2)
+		angle = math.atan2(v2.x,v2.z)
+	else:
+		_val = vec1.dot(vec2)
+		if _val<0.707:
+			angle = math.acos(_val)
+		else:
+			_val = vec1.cross(vec2).length
+			angle = math.asin(_val)
+	return angle
 
 
 verts = [None] * (NUMCOL*2+1)
@@ -233,23 +265,43 @@ for idx0,idx1,tup in edges:
 edges = edges_n
 del(edges_n)
 
+sumlength = 0.0
+
 for idx0,idx1,norm in edges:
 	v0 = verts[idx0]
 	v1 = verts[idx1]
 	leng = (v1-v0).length
-	# plane for bar
-	p1 = Plane(norm,norm.dot(v0))
-	# plane for screw A
-	pA = Plane(norms[idx0],norms[idx0].dot(v0))
-	# plane for screw B
-	pB = Plane(norms[idx1],norms[idx1].dot(v1))
-	cutpointA,cutdirA,cutangleA = p1.intersect(pA)
-	cutpointB,cutdirB,cutangleB = p1.intersect(pB)
-	cutangleA *= (180/math.pi)
-	cutangleB *= (180/math.pi)
-	print("  (%6.2f/%6.2f/%6.2f) (%6.2f/%6.2f/%6.2f) (%6.2f/%6.2f/%6.2f)   %6.3fm  %5.2fdeg  %5.2fdeg"%(v0.x,v0.y,v0.z,v1.x,v1.y,v1.z,norm.x,norm.y,norm.z,leng,cutangleA,cutangleB))
+	## plane for bar
+	#p1 = Plane(norm,norm.dot(v0))
+	## plane for screw A
+	#pA = Plane(norms[idx0],norms[idx0].dot(v0))
+	## plane for screw B
+	#pB = Plane(norms[idx1],norms[idx1].dot(v1))
+	#cutpointA,cutdirA,cutangleA = p1.intersect(pA)
+	#cutpointB,cutdirB,cutangleB = p1.intersect(pB)
+	#cutangleA *= (180/math.pi)
+	#cutangleB *= (180/math.pi)
+	# get edge-dir and orth-corrected normals.
+	edir = (v1-v0).copy() ; edir.normalize()
+	n0 = norms[idx0].copy()
+	n1 = norms[idx1].copy()
+	n0 -= edir.dot(n0)*edir
+	n1 -= edir.dot(n1)*edir
+	n0.normalize()
+	n1.normalize()
+	twistangleA = calc_angle(norm,n0,edir)
+	twistangleB = calc_angle(norm,n1,edir*-1.0)
+	bendangleA = calc_angle(n0,norms[idx0])
+	bendangleB = calc_angle(n1,norms[idx1])
+	fact = 180.0/math.pi
+	twistangleA *= fact
+	twistangleB *= fact
+	bendangleA  *= fact
+	bendangleB  *= fact
+	print("  (%6.2f/%6.2f/%6.2f) (%6.2f/%6.2f/%6.2f)   %6.3fm   twA %5.2fdeg   twB %5.2fdeg    bdA%5.2fdeg   bdB %5.2fdeg"%(v0.x,v0.y,v0.z,v1.x,v1.y,v1.z,leng,twistangleA,twistangleB,bendangleA,bendangleB))
+	sumlength += leng
 
-
+print ("total length of %d bars: %.2f"%(len(edges),sumlength))
 # here I have:
 
 # list 'verts' with the Vectors of the cornerpoints. These are the screws
