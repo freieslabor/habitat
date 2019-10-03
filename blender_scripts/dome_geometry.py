@@ -161,14 +161,18 @@ def calc_angle(vec1,vec2,axis=None):
 
 verts = [None] * (NUMCOL*2+1)
 norms = verts[:]
+# calc location of all vertices
 for i in range(NUMCOL):
 	a0 = math.pi*2.0*(i+0.0)/NUMCOL
 	a1 = math.pi*2.0*(i+0.5)/NUMCOL
 	v = mathutils.Vector(( RADIUS*math.cos(a0) , RADIUS*math.sin(a0) , 0.0 ))
+	# lower ones
 	verts[i] = v
 	v = mathutils.Vector(( SMALLER_RAD_FAC*RADIUS*math.cos(a1) , SMALLER_RAD_FAC*RADIUS*math.sin(a1) , HEIGHT_INT_RING ))
+	# middle ring
 	verts[i+NUMCOL] = v
 
+# last vertex on top
 v = mathutils.Vector(( 0.0 , 0.0 , HEIGHT_DOME ))
 verts[NUMCOL*2] = v
 
@@ -210,7 +214,7 @@ for v in norms:
 
 # calc edges (beams) now.
 # try to rotate them so the middle point is pointing mostly upward.
-# first fill in tuples:  (vert1,vert2,vector for midopint)
+# first fill in tuples:  (index of vert0,index of vert1,upward-vector)
 
 edges = list()
 
@@ -244,7 +248,7 @@ for i in range(NUMCOL):
 	v1 = verts[idx1]
 	edges.append( (idx0,idx1,up) )
 
-# process edges to find orientation
+# process edges to correct orientation of the 'up' vector to be really orthogonal.
 edges_n = list()
 for idx0,idx1,tup in edges:
 	v0 = verts[idx0]
@@ -267,6 +271,7 @@ del(edges_n)
 
 sumlength = 0.0
 
+# calc and print the angles of the connecting metal pieces.
 for idx0,idx1,norm in edges:
 	v0 = verts[idx0]
 	v1 = verts[idx1]
@@ -358,6 +363,7 @@ def genscrewline(name,l):
 obj_dome = bpy.data.objects.new('dome',None)
 bpy.context.scene.collection.objects.link(obj_dome)
 
+# generate cubes for blender visualization
 for i in range(len(edges)):
 	idx0,idx1,upw = edges[i]
 	v0 = verts[idx0]
@@ -371,6 +377,7 @@ for i in range(len(edges)):
 	obj.scale = mathutils.Vector((1,1,1))
 	obj.parent = obj_dome
 
+# generate lines to show orientation of screws.
 for i in range(len(verts)):
 	obj = genscrewline("screw%02d"%i,0.3)
 	obj.location = verts[i]
