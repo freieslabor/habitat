@@ -38,6 +38,9 @@ BAR_W = 0.04
 BAR_T = 0.028
 BAR_END_TAP = 0.09
 
+BEND_LENGTH = 0.1		# length of metal bent over. Distance from crease to screwhole.
+BEND_RADIUS = 0.005		# bending radius of the metal parts.
+
 
 #_msh = bpy.data.meshes.new('einMesh')
 #_obj = bpy.data.objects.new('obj111',_msh)
@@ -269,10 +272,28 @@ for idx0,idx1,tup in edges:
 edges = edges_n
 del(edges_n)
 
+
+def bend_shortening(angle):
+	"""
+		Calc how much a bar is shortened by bending over the ends.
+		angle is in radians.
+	"""
+	# curved-len = bendrad * angle
+	bowlen = BEND_RADIUS*angle
+	backoff = BEND_LENGTH + 0.5*bowlen
+	downstraight = BEND_LENGTH - 0.5*bowlen
+	add_length = (0-backoff) + BEND_RADIUS*math.sin(angle) + math.cos(angle)*downstraight
+	return -add_length
+
+
+
+
+
 sumlength = 0.0
 
 # calc and print the angles of the connecting metal pieces.
-for idx0,idx1,norm in edges:
+for i in range(len(edges)):
+	idx0,idx1,norm = edges[i]
 	v0 = verts[idx0]
 	v1 = verts[idx1]
 	leng = (v1-v0).length
@@ -298,12 +319,14 @@ for idx0,idx1,norm in edges:
 	twistangleB = calc_angle(norm,n1,edir*-1.0)
 	bendangleA = calc_angle(n0,norms[idx0])
 	bendangleB = calc_angle(n1,norms[idx1])
+	shorteningA = bend_shortening(bendangleA)
+	shorteningB = bend_shortening(bendangleB)
 	fact = 180.0/math.pi
 	twistangleA *= fact
 	twistangleB *= fact
 	bendangleA  *= fact
 	bendangleB  *= fact
-	print("  (%6.2f/%6.2f/%6.2f) (%6.2f/%6.2f/%6.2f)   %6.3fm   twA %5.2fdeg   twB %5.2fdeg    bdA%5.2fdeg   bdB %5.2fdeg"%(v0.x,v0.y,v0.z,v1.x,v1.y,v1.z,leng,twistangleA,twistangleB,bendangleA,bendangleB))
+	print("  bar #%2d   %6.3fm   tw%6.2fdeg    bdA%5.2fdeg   bdB %5.2fdeg   len_flat %6.3fm"%(i,leng,twistangleA+twistangleB,bendangleA,bendangleB,leng+shorteningA+shorteningB))
 	sumlength += leng
 
 print ("total length of %d bars: %.2f"%(len(edges),sumlength))
@@ -354,6 +377,7 @@ def genscrewline(name,l):
 	return _obj
 
 
+
 # bar dimensions
 #BAR_W  0.04     * 4
 #BAR_T  0.028     * 4
@@ -392,5 +416,18 @@ for i in range(len(verts)):
 #   lots
 #   bars are middle-centered. should be oriented around top of bar.
 #   bent sheetmetal ends are not modelled, offset of bent ends is not considered.
+
+#for i in range(0,91,5):
+#	ang = math.pi*i/180.0
+#	print("%2d deg  ->  %8.2f cm"%( i , 100.0*bend_shortening(ang) ))
+
+
+def calc_length_with_bent_ends(edge_index):
+	""" calc len of bar with consideration of the bends. """
+	idx0,idx1,enorm = edges[edge_index]
+	v0 = verts[idx0]
+	v1 = verts[idx1]
+
+
 
 
