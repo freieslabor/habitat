@@ -20,7 +20,7 @@ import mathutils.geometry
 
 
 NUMCOL = 10				# number of columns (corners)
-RADIUS = 2.5			# radius to corners
+RADIUS = 2.5*0.98			# radius to corners
 
 SMALLER_RAD_FAC = 0.6	# factor to scale middle-ring down compared to base-ring.
 
@@ -196,6 +196,10 @@ def up_vector(v):
 for i in range(NUMCOL):
 	v = verts[i].copy()
 	v.normalize()
+	# tilt up normal of outer points. Otherwise there are too high angles of 43 deg.
+	tiltup_deg = 20
+	v.z = math.tan(tiltup_deg*math.pi/180.0)
+	v.normalize()
 	norms[i] = v
 	#edges of one middle-ring vertex
 	sv1 = verts[i+NUMCOL] - verts[i]
@@ -326,7 +330,7 @@ for i in range(len(edges)):
 	twistangleB *= fact
 	bendangleA  *= fact
 	bendangleB  *= fact
-	print("  bar #%2d   %6.3fm   tw%6.2fdeg    bdA%5.2fdeg   bdB %5.2fdeg   len_flat %6.3fm"%(i,leng,twistangleA+twistangleB,bendangleA,bendangleB,leng+shorteningA+shorteningB))
+	print("  bar #%2d   %6.3fm   tw%6.2fdeg    bdA%5.2fdeg   bdB %5.2fdeg"%(i,leng,twistangleA+twistangleB,bendangleA,bendangleB))
 	sumlength += leng
 
 print ("total length of %d bars: %.2f"%(len(edges),sumlength))
