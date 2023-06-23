@@ -162,22 +162,25 @@ def calc_angle(vec1,vec2,axis=None):
 	return angle
 
 
-verts = [None] * (NUMCOL*2+1)
+verts = [None] * (NUMCOL*3+1)
 norms = verts[:]
 # calc location of all vertices
 for i in range(NUMCOL):
 	a0 = math.pi*2.0*(i+0.0)/NUMCOL
 	a1 = math.pi*2.0*(i+0.5)/NUMCOL
-	v = mathutils.Vector(( RADIUS*math.cos(a0) , RADIUS*math.sin(a0) , 0.0 ))
 	# lower ones
+	v = mathutils.Vector(( RADIUS*math.cos(a0) , RADIUS*math.sin(a0) , 0.0 ))
 	verts[i] = v
+	# ground points
+	v = mathutils.Vector(( RADIUS*math.cos(a1) , RADIUS*math.sin(a1) , -ROOM_HEIGHT ))
+	verts[i+NUMCOL*2] = v
 	v = mathutils.Vector(( SMALLER_RAD_FAC*RADIUS*math.cos(a1) , SMALLER_RAD_FAC*RADIUS*math.sin(a1) , HEIGHT_INT_RING ))
 	# middle ring
 	verts[i+NUMCOL] = v
 
 # last vertex on top
 v = mathutils.Vector(( 0.0 , 0.0 , HEIGHT_DOME ))
-verts[NUMCOL*2] = v
+verts[NUMCOL*3] = v
 
 for v in verts:
 	print("  (%6.2f/%6.2f/%6.2f)"%(v.x,v.y,v.z))
@@ -190,7 +193,7 @@ def up_vector(v):
 	res.normalize()
 	return res
 
-# normals.
+# calc normals.
 # for lower circle, normals are straight out.
 # for middle circle, normals are mean of the dirs of the three bars at the point.
 for i in range(NUMCOL):
@@ -204,7 +207,7 @@ for i in range(NUMCOL):
 	#edges of one middle-ring vertex
 	sv1 = verts[i+NUMCOL] - verts[i]
 	sv2 = verts[i+NUMCOL] - verts[(i+1)%NUMCOL]
-	sv3 = verts[i+NUMCOL] - verts[2*NUMCOL]
+	sv3 = verts[i+NUMCOL] - verts[3*NUMCOL]
 	sv1.normalize()
 	sv2.normalize()
 	sv3.normalize()
@@ -213,8 +216,13 @@ for i in range(NUMCOL):
 #	n = sv1+sv2+sv3
 #	n.normalize()
 	norms[i+NUMCOL] = n
+	# ground verts just point outside
+	v = verts[i+2*NUMCOL].copy()
+	v.z=0
+	v.normalize()
+	norms[i+2*NUMCOL] = v
 
-norms[2*NUMCOL] = mathutils.Vector(( 0,0,1 ))
+norms[3*NUMCOL] = mathutils.Vector(( 0,0,1 ))
 
 for v in norms:
 	print("  (%6.2f/%6.2f/%6.2f)"%(v.x,v.y,v.z))
@@ -250,10 +258,20 @@ for i in range(NUMCOL):
 	edges.append( (idx0,idx1,up) )
 	# upper star
 	idx0 = NUMCOL+i
-	idx1 = NUMCOL*2
+	idx1 = NUMCOL*3
 	v0 = verts[idx0]
 	v1 = verts[idx1]
 	edges.append( (idx0,idx1,up) )
+	# wall posts
+	idx0 = i
+	idx1 = NUMCOL*2+i
+	v0 = verts[idx0]
+	v1 = verts[idx1]
+	edges.append( (idx0,idx1,(v0+v1)) )
+	idx0 = (i+1)%NUMCOL
+	v0 = verts[idx0]
+	edges.append( (idx0,idx1,(v0+v1)) )
+
 
 # process edges to correct orientation of the 'up' vector to be really orthogonal.
 edges_n = list()
